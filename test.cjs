@@ -147,4 +147,34 @@ if (Object.keys(countries).length > 0) {
   ok(`data: all ${Object.keys(countries).length} countries pass validation`);
 }
 
+// 12. Seat price: indexed to the cheapest seat, null where it is undefined
+const rules_price = {
+  country: 'Test', chamber: 'Test', year: 2024, system: 'test', note: '',
+  total_seats: 100, threshold: 0, method: 'actual',
+  parties: [
+    { name: 'Cheap',  vote_share: 0.40, seats: 70, color: '#000000' },
+    { name: 'Dear',   vote_share: 0.40, seats: 30, color: '#111111' },
+    { name: 'Shut out', vote_share: 0.20, seats: 0, color: '#222222' }
+  ]
+};
+const res_price = runScenario(rules_price);
+const price_of = n => res_price.parties.find(p => p.name === n).price;
+assert.strictEqual(price_of('Cheap'), 1, 'cheapest seat indexes to 1.0');
+// Same votes, 30 seats instead of 70: each seat cost 70/30 as much.
+assert(Math.abs(price_of('Dear') - 7 / 3) < 1e-9, 'dearer seat is 2.33x the cheapest');
+assert.strictEqual(price_of('Shut out'), null, 'party with no seats has no price');
+const res_empty = runScenario({ ...rules_price, method: 'hare', threshold: 0.9 });
+assert(res_empty.parties.every(p => p.price === null || Number.isFinite(p.price)),
+  'price is never NaN or Infinity when every party is cut');
+ok('runScenario seat price: indexed to cheapest, null where undefined, never NaN');
+
+// 13. index.html's inline script must parse. Nothing else here loads the UI, so
+// a syntax error in it otherwise ships with a green suite.
+const vm = require('node:vm');
+const html = require('node:fs').readFileSync(`${__dirname}/index.html`, 'utf8');
+const inline = [...html.matchAll(/<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/g)].map(m => m[1]);
+assert(inline.length > 0, 'index.html has an inline script to check');
+for (const code of inline) new vm.Script(code);   // compiles only; throws SyntaxError if malformed
+ok(`index.html: ${inline.length} inline script block parses`);
+
 console.log(`\n${ok_count} checks passed`);

@@ -111,6 +111,14 @@ function runScenario(rules, opts = {}) {
 
   const total = sum(parties.map(p => p.seats));
   const majority = Math.floor(total / 2) + 1;
+
+  // Seat price: vote share per seat, indexed so the cheapest seat in the
+  // chamber reads 1.0. A party at 2.4 paid 2.4x what the cheapest party paid
+  // for the same single seat. Parties with no seats, or seats but no votes,
+  // have no meaningful price and get null.
+  const prices = parties.map(p => (p.seats > 0 && p.votes > 0 ? p.votes / (p.seats / total) : 0));
+  const cheapest = Math.min(...prices.filter(x => x > 0));
+  parties.forEach((p, i) => { p.price = prices[i] > 0 ? prices[i] / cheapest : null; });
   const cols = Math.max(1, Math.ceil(Math.sqrt(total)));
   const rows = Math.max(1, Math.ceil(total / cols));
 
