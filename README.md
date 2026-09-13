@@ -32,16 +32,40 @@ Swap the allocation method and watch the same votes produce a different chamber:
 - `index.html` — UI and rendering
 - `electoral.js` — Seat allocation math (pure functions, no DOM)
 - `countries.js` — Electoral data (country, chamber, year, parties, votes, seats)
-- `test.cjs` — Data assertions; run with `node test.cjs`
+- `test.cjs` — Data assertions; run with `node test.cjs`. The last check compiles
+  `index.html`'s inline script, because nothing else here loads the UI and a
+  syntax error in it would otherwise ship with a green suite.
 
 ## Controls
 
-Country, method, threshold slider, chamber size, per-party vote shares, coalition
-builder, labels toggle, PNG export, and view controls (Flatten, Orbit, Re-centre).
+Scenario presets, country, method, threshold slider, chamber size, per-party vote
+shares, coalition builder, labels toggle, PNG export, and view controls (Flatten,
+Orbit, Re-centre).
 
 Clicking a seat adds its party to the coalition; dragging the board does not.
 PNG export renders a flat SVG of the same board rather than a screenshot of the
 tilted view—a plan is the more useful thing to paste into a document.
+
+## Teaching the change
+
+The board shows states; these three name the *cause*, which is the part a user
+cannot infer from watching seats move.
+
+- **Scenarios** — a dropdown of named, pre-verified states with a sentence saying
+  what to look at and which control to try next. It adds no new mechanics: each
+  preset is only a set of values for controls that already exist. Applying one
+  renders twice on purpose — first the chamber as actually elected, then the
+  preset's method — so the change line below narrates the difference for free.
+- **Change line** — after any control change, the top movers and the shift in the
+  Gallagher index, e.g. `Labour −192 · Reform UK +88 · Gallagher 23.8 → 0.1`.
+  While the threshold slider is being dragged the baseline is held still, so the
+  line reads as the whole drag rather than the last frame.
+- **Price column** — vote share per seat, indexed so the cheapest seat in the
+  chamber reads `1.0×`. A party at `2.4×` paid 2.4 times as much per seat as the
+  cheapest party did. Read the column's *spread*: under proportional rules it
+  flattens to 1.0 everywhere, while UK 2024 as elected runs Labour 1.0× against
+  Conservative 2.4× and Others 5.0×. It is a per-party Gallagher index. Parties
+  with no seats have no meaningful price and show an em dash.
 
 ## Metrics shown
 
