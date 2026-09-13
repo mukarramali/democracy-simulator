@@ -5,6 +5,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Democracy Chess Board</title>
 <style>
+  /* Registered so the tilt can be transitioned. Without @property a custom
+     property jumps between values, and the billboarded pieces — which read the
+     same variable to stand upright — would snap out of step with the board. */
+  @property --tilt { syntax: '<angle>';  inherits: true; initial-value: 56deg; }
+  @property --spin { syntax: '<angle>';  inherits: true; initial-value: 0deg; }
+  @property --fit  { syntax: '<number>'; inherits: true; initial-value: 1; }
+  @property --zoom { syntax: '<number>'; inherits: true; initial-value: 1; }
+
   :root {
     color-scheme: dark;
     --bg: #14151a; --panel: #1c1e25; --line: #2a2d36; --sunk: #23252c;
@@ -38,9 +46,11 @@
   input[type=range] { width: 100%; accent-color: var(--gold); }
   .two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
   .btns { display: flex; gap: 8px; }
+  .btns + .btns { margin-top: 8px; }
   button { flex: 1; background: var(--sunk); color: var(--ink); border: 1px solid var(--line);
            border-radius: 6px; padding: 7px 10px; font: inherit; cursor: pointer; }
   button:hover { border-color: var(--ink-3); }
+  button[aria-pressed=true] { border-color: var(--gold); color: var(--gold); }
 
   /* Party table: checkbox, piece, name + bars, votes input, seats */
   .row { display: grid; grid-template-columns: 18px 18px minmax(0,1fr) 62px 44px;
@@ -53,7 +63,8 @@
   .nm { font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .bars { display: flex; flex-direction: column; gap: 2px; margin-top: 3px; }
   .bars i { display: block; height: 4px; border-radius: 2px; min-width: 2px;
-             box-shadow: 0 0 0 1px rgba(255,255,255,.22); }
+            box-shadow: 0 0 0 1px rgba(255,255,255,.22);
+            transition: width .5s cubic-bezier(.22,.85,.28,1), background-color .4s ease; }
   .bv { background: var(--ink-3); }
   .row input.vs { padding: 3px 5px; font-size: 12px; text-align: right; }
   .st { text-align: right; font-variant-numeric: tabular-nums; font-size: 12.5px; }
@@ -63,7 +74,8 @@
   .hd .r { text-align: right; }
 
   .coal { margin-top: 10px; padding: 9px 11px; border-radius: 7px; font-size: 12.5px;
-          background: var(--sunk); border: 1px solid var(--line); color: var(--ink-2); }
+          background: var(--sunk); border: 1px solid var(--line); color: var(--ink-2);
+          transition: border-color .4s, color .4s; }
   .coal.win { border-color: #2f6f4a; color: #8fe0b0; }
 
   .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 14px; }
@@ -73,13 +85,49 @@
              font-variant-numeric: tabular-nums; }
   .tile .s { font-size: 11.5px; color: var(--ink-2); }
 
-  svg.board { display: block; width: auto; height: auto; max-width: 100%; max-height: 74vh;
-               margin-inline: auto; border-radius: 8px; background: var(--sunk); }
+  /* ---- the 3D board ---- */
+  .scene { --tilt: 56deg; --spin: 0deg; --fit: 1; --zoom: 1; --cell: 24px;
+           position: relative; height: 72vh; min-height: 380px; overflow: hidden;
+           border-radius: 8px; background: var(--sunk); cursor: grab;
+           --persp: 1500px; perspective: var(--persp); perspective-origin: 50% 44%; touch-action: none;
+           transition: --tilt .6s ease, --spin .6s ease, --fit .55s ease; }
+  .scene.drag { cursor: grabbing; }
+  .scene.drag, .scene.nofx { transition: none; }
+
+  .stage { position: absolute; left: 50%; top: 50%; transform-style: preserve-3d;
+           transform: translate(-50%, -50%) scale(calc(var(--fit) * var(--zoom)))
+                      rotateX(var(--tilt)) rotateZ(var(--spin));
+           transition: width .55s ease, height .55s ease; }
+
+  /* One element per seat, reused across renders — that reuse is what lets the
+     browser animate a seat from its old place and colour to its new ones
+     instead of tearing the board down and rebuilding it. */
+  .seat { position: absolute; width: var(--cell); height: var(--cell); opacity: 0;
+          transform-style: preserve-3d;
+          transition: transform .6s cubic-bezier(.22,.85,.28,1) var(--d),
+                      opacity .4s ease var(--d); }
+  .seat b { position: absolute; inset: 0; border-radius: 2px;
+            transition: background-color .5s ease var(--d); }
+  .seat i { position: absolute; left: 0; right: 0; bottom: 1px; font-style: normal;
+            font: 17px/1 "Apple Symbols", "Segoe UI Symbol", serif; text-align: center;
+            transform-origin: 50% 100%;
+            /* Undo the board's rotation, innermost first, so the piece stands
+               upright and faces the camera however the board is turned. */
+            transform: rotateZ(calc(var(--spin) * -1)) rotateX(calc(var(--tilt) * -1));
+            text-shadow: 0 1px 1px rgba(0,0,0,.4);
+            transition: color .5s ease var(--d), opacity .35s ease; }
+  .lab { position: absolute; white-space: nowrap; pointer-events: none;
+         font: 600 11px system-ui, sans-serif; color: #fff; opacity: 0;
+         text-shadow: 0 0 3px #000, 0 0 3px #000, 0 1px 2px #000;
+         transform-origin: 50% 100%;
+         transition: transform .6s cubic-bezier(.22,.85,.28,1), opacity .4s ease; }
+
+  .viewbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+             color: var(--ink-3); font-size: 11.5px; margin-top: 10px; }
+  .viewbar span { display: flex; align-items: center; gap: 5px; }
+  .viewbar em { width: 11px; height: 11px; border-radius: 3px; background: var(--gold); }
   .note { color: var(--ink-2); font-size: 12.5px; margin: 12px 0 0; max-width: 70ch; }
   .note b { color: var(--ink); font-weight: 600; }
-  .key { display: flex; gap: 14px; flex-wrap: wrap; color: var(--ink-3); font-size: 11.5px; margin-top: 10px; }
-  .key span { display: flex; align-items: center; gap: 5px; }
-  .key i { width: 11px; height: 11px; border-radius: 3px; display: inline-block; }
 
   #tip { position: fixed; pointer-events: none; opacity: 0; transition: opacity .1s;
          background: #0c0d11; border: 1px solid var(--line); border-radius: 7px;
@@ -87,6 +135,14 @@
          box-shadow: 0 6px 20px rgba(0,0,0,.5); }
   #tip b { display: block; font-size: 12.5px; }
   #tip s { display: block; color: var(--ink-2); text-decoration: none; font-variant-numeric: tabular-nums; }
+
+  /* Continuous input wants response, not choreography. */
+  .stage.live .seat, .stage.live .seat b, .stage.live .seat i, .stage.live .lab {
+    transition-duration: 110ms; transition-delay: 0ms; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .scene, .stage, .seat, .seat b, .seat i, .lab, .bars i { transition-duration: 1ms !important; }
+  }
 </style>
 </head>
 <body>
@@ -113,6 +169,11 @@
         <button id="labels" type="button" aria-pressed="false">Label all</button>
         <button id="png" type="button">PNG</button>
       </div>
+      <div class="btns">
+        <button id="flat" type="button" aria-pressed="false">Flatten</button>
+        <button id="spin" type="button" aria-pressed="false">Orbit</button>
+        <button id="recenter" type="button">Re-centre</button>
+      </div>
     </div>
 
     <div class="card">
@@ -125,11 +186,13 @@
 
   <main>
     <div class="tiles" id="tiles"></div>
-    <svg class="board" id="board" role="img"></svg>
-    <div class="key">
-      <span><i style="background:var(--gold)"></i> pivot seat — crosses the majority line</span>
+    <div class="scene" id="scene" role="img" aria-label="Seating board">
+      <div class="stage" id="stage"></div>
+    </div>
+    <div class="viewbar">
+      <span><em></em> pivot seat — crosses the majority line</span>
       <span>♛ ♜ ♝ ♞ ♟ — 1st to 5th-and-below by seats</span>
-      <span><i style="background:var(--sunk);border:1px solid var(--line)"></i> empty — chamber is not a perfect rectangle</span>
+      <span>drag to turn the board · scroll to zoom · click a seat to add its party</span>
     </div>
     <p class="note" id="note"></p>
   </main>
@@ -147,46 +210,118 @@
   const pct = n => (n * 100).toFixed(1) + '%';
 
   const state = { country: 'Germany', method: '', threshold: 0, seats: 0, shares: {}, coalition: new Set(), labelsAll: false };
+  const vw = { spin: 0, tilt: 56, zoom: 1 };
   let view = null;   // last board state, for hover and export
 
-  /* ---------- board ---------- */
+  /* ---------- 3D board ----------
+     The element pool is the whole trick: seats are created once and then only
+     moved and recoloured, so every change to the scenario is a transition
+     rather than a teardown. */
 
-  function boardSvg(b) {
-    const w = b.cols * CELL + PAD * 2, h = b.rows * CELL + PAD * 2;
+  const scene = $('scene'), stage = $('stage');
+  const seats = [], labels = [];
+
+  function seatAt(i) {
+    if (!seats[i]) {
+      const s = document.createElement('div');
+      s.className = 'seat';
+      // Index-based delay, set once: the board resettles as a sweep, not a flash.
+      s.style.setProperty('--d', Math.round(i * 0.45) + 'ms');
+      s.innerHTML = '<b></b><i></i>';
+      stage.appendChild(s);
+      seats[i] = s;
+    }
+    return seats[i];
+  }
+
+  function labelAt(i) {
+    if (!labels[i]) {
+      const l = document.createElement('div');
+      l.className = 'lab';
+      stage.appendChild(l);
+      labels[i] = l;
+    }
+    return labels[i];
+  }
+
+  /* Fit the board to the scene. Tilting foreshortens the depth, which is the
+     easy half; the hard half is that perspective also magnifies the near edge,
+     and how much it magnifies depends on the scale we are trying to solve for.
+     Three fixed-point passes converge well inside a pixel — cheaper to run than
+     to derive the closed form, and a lot harder to get wrong. */
+  const PERSP = 1500;
+  function fitBoard() {
+    if (!view) return;
+    const rad = vw.tilt * Math.PI / 180;
+    const wide = (scene.clientWidth * 0.92) / Math.max(1, view.cols * CELL);
+    const tall = (scene.clientHeight * 0.92) /
+      Math.max(64, view.rows * CELL * Math.cos(rad) + 64);
+    const flat = Math.min(2.2, wide, tall);
+    const lift = view.rows * CELL * 0.5 * Math.sin(rad);   // how far the near edge comes forward
+    let f = flat;
+    for (let k = 0; k < 3; k++) {
+      f = flat / (PERSP / Math.max(PERSP * 0.35, PERSP - f * lift));
+    }
+    scene.style.setProperty('--fit', f.toFixed(3));
+  }
+
+  function paint(b) {
+    stage.style.width = b.cols * CELL + 'px';
+    stage.style.height = b.rows * CELL + 'px';
+    fitBoard();
+
     const dim = state.coalition.size > 0;
-    let squares = '', pieces = '', labels = '';
-
-    for (let i = 0; i < b.rows * b.cols; i++) {
-      const r = (i / b.cols) | 0, c = i % b.cols, x = PAD + c * CELL, y = PAD + r * CELL;
-      if (i >= b.total) {
-        squares += `<rect class="off" x="${x}" y="${y}" width="${CELL}" height="${CELL}"/>`;
-        continue;
-      }
-      const cell = b.cells[i], p = esc(cell.party);
-      squares += `<rect class="${(r + c) % 2 ? 'dk' : 'lt'}${cell.pivot ? ' pv' : ''}" x="${x}" y="${y}" width="${CELL}" height="${CELL}" data-p="${p}"/>`;
-      pieces += `<text x="${x + CELL / 2}" y="${y + CELL / 2 + 1}" fill="${cell.color}" data-p="${p}"` +
-                (dim && !state.coalition.has(cell.party) ? ' opacity=".25"' : '') + `>${cell.piece}</text>`;
+    for (let i = 0; i < Math.max(seats.length, b.total); i++) {
+      const s = seatAt(i), cell = b.cells[i];
+      if (!cell) { s.style.opacity = 0; continue; }
+      s.style.opacity = 1;
+      s.style.transform = `translate3d(${cell.c * CELL}px, ${cell.r * CELL}px, ${cell.pivot ? 7 : 0}px)`;
+      s.dataset.p = cell.party;
+      s.firstChild.style.background = cell.pivot ? '#f5c518' : ((cell.r + cell.c) % 2 ? '#d9c7a5' : '#ece0c9');
+      const pc = s.lastChild;
+      pc.textContent = cell.piece;
+      pc.style.color = cell.color;
+      pc.style.opacity = dim && !state.coalition.has(cell.party) ? 0.2 : 1;
     }
 
-    // One direct label per bloc, at the middle of its run. Small parties only when asked.
+    // One direct label per bloc, floating above its seats.
+    const shown = b.parties.filter(p => p.seats && (state.labelsAll || p.seats / b.total >= 0.05));
+    for (let i = 0; i < Math.max(labels.length, shown.length); i++) {
+      const l = labelAt(i), p = shown[i];
+      if (!p) { l.style.opacity = 0; continue; }
+      const mid = p.start + ((p.seats / 2) | 0);
+      const half = p.name.length * 3.3 + 3;
+      const lx = Math.min(Math.max(half, (mid % b.cols) * CELL + CELL / 2), b.cols * CELL - half);
+      l.textContent = p.name;
+      l.style.opacity = 1;
+      l.style.transform = `translate3d(${lx.toFixed(1)}px, ${((mid / b.cols) | 0) * CELL + CELL / 2}px, 34px)` +
+        ` translateX(-50%) rotateZ(calc(var(--spin) * -1)) rotateX(calc(var(--tilt) * -1))`;
+    }
+  }
+
+  /* Flat SVG of the same board. Only the PNG export uses it — a screenshot of a
+     tilted board is a worse thing to paste into a document than a clean plan. */
+  function boardSvg(b) {
+    const w = b.cols * CELL + PAD * 2, h = b.rows * CELL + PAD * 2;
+    let squares = '', pieces = '', labs = '';
+    for (let i = 0; i < b.total; i++) {
+      const cell = b.cells[i], x = PAD + cell.c * CELL, y = PAD + cell.r * CELL;
+      squares += `<rect class="${(cell.r + cell.c) % 2 ? 'dk' : 'lt'}${cell.pivot ? ' pv' : ''}" x="${x}" y="${y}" width="${CELL}" height="${CELL}"/>`;
+      pieces += `<text x="${x + CELL / 2}" y="${y + CELL / 2 + 1}" fill="${cell.color}">${cell.piece}</text>`;
+    }
     for (const p of b.parties) {
       if (!p.seats || (!state.labelsAll && p.seats / b.total < 0.05)) continue;
       const mid = p.start + ((p.seats / 2) | 0);
-      // Keep the label inside the board. Half-width is estimated from the
-      // character count — SVG strings can't measure text before they exist.
       const half = p.name.length * 3.3 + 3;
       const x = Math.min(Math.max(PAD + half, PAD + (mid % b.cols) * CELL + CELL / 2), w - PAD - half);
-      labels += `<text class="lab" x="${x.toFixed(1)}" y="${PAD + (((mid / b.cols) | 0) * CELL) + CELL / 2 + 1}">${esc(p.name)}</text>`;
+      labs += `<text class="lab" x="${x.toFixed(1)}" y="${PAD + (((mid / b.cols) | 0) * CELL) + CELL / 2 + 1}">${esc(p.name)}</text>`;
     }
-
-    // The <style> lives inside the SVG so the PNG export keeps it.
     return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}">` +
-      `<style>` +
-      `rect.lt{fill:#ece0c9}rect.dk{fill:#d9c7a5}rect.off{fill:#23252c}rect.pv{fill:#f5c518}` +
+      `<style>rect.lt{fill:#ece0c9}rect.dk{fill:#d9c7a5}rect.pv{fill:#f5c518}` +
       `text{font:16px "Apple Symbols","Segoe UI Symbol",serif;text-anchor:middle;dominant-baseline:central;` +
       `paint-order:stroke;stroke:rgba(0,0,0,.42);stroke-width:.7px}` +
       `text.lab{font:600 11px system-ui,sans-serif;fill:#fff;stroke:rgba(0,0,0,.8);stroke-width:3.2px}` +
-      `</style><rect width="${w}" height="${h}" fill="#23252c"/>${squares}${pieces}${labels}</svg>`;
+      `</style><rect width="${w}" height="${h}" fill="#23252c"/>${squares}${pieces}${labs}</svg>`;
   }
 
   /* ---------- panels ---------- */
@@ -224,7 +359,7 @@
     }).join('');
   }
 
-  function coalition(b) {
+  function coalitionText(b) {
     const picked = b.parties.filter(p => state.coalition.has(p.name));
     if (!picked.length) return 'Click parties to add them to a government. The board dims everyone left out.';
     const n = picked.reduce((a, p) => a + p.seats, 0), gap = b.majority - n;
@@ -235,26 +370,84 @@
   /* ---------- render ---------- */
 
   function render() {
-    const rules = COUNTRIES[state.country];
-    const b = view = runScenario(rules, {
+    const b = view = runScenario(COUNTRIES[state.country], {
       method: state.method, seats: state.seats, threshold: state.threshold, shares: state.shares,
     });
 
-    $('board').outerHTML = boardSvg(b).replace('<svg ', '<svg class="board" id="board" role="img" aria-label="' +
-      esc(`${b.chamber}, ${b.total} seats. ` + b.parties.filter(p => p.seats).map(p => `${p.name} ${p.seats}`).join(', ')) + '" ');
+    paint(b);
+    scene.setAttribute('aria-label',
+      `${b.chamber}, ${b.total} seats. ` + b.parties.filter(p => p.seats).map(p => `${p.name} ${p.seats}`).join(', '));
     $('tiles').innerHTML = tiles(b);
     $('parties').innerHTML = partyRows(b);
     const raw = Object.values(state.shares).reduce((a, v) => a + v, 0);
     $('vsum').textContent = Math.abs(raw - 1) < 0.005 ? '' : `· entered ${pct(raw)}, normalised`;
     const coal = $('coal');
-    coal.innerHTML = coalition(b);
-    coal.classList.toggle('win', b.parties.filter(p => state.coalition.has(p.name)).reduce((a, p) => a + p.seats, 0) >= b.majority && state.coalition.size > 0);
+    coal.innerHTML = coalitionText(b);
+    coal.classList.toggle('win', state.coalition.size > 0 &&
+      b.parties.filter(p => state.coalition.has(p.name)).reduce((a, p) => a + p.seats, 0) >= b.majority);
     $('note').innerHTML = `<b>${esc(b.country)} · ${esc(b.chamber)} ${b.year}</b> — ${esc(b.system)}. ${esc(b.note || '')}` +
       (b.method === 'actual' ? '' : ` <b>Now showing:</b> ${esc(METHODS[b.method])} at a ${pct(b.threshold)} threshold, not the elected chamber.`);
     $('thv').textContent = state.threshold ? pct(state.threshold) : 'none';
   }
 
+  /* ---------- view ---------- */
+
+  function setView(spin, tilt) {
+    vw.spin = spin;
+    vw.tilt = Math.max(0, Math.min(82, tilt));
+    scene.style.setProperty('--spin', vw.spin.toFixed(1) + 'deg');
+    scene.style.setProperty('--tilt', vw.tilt.toFixed(1) + 'deg');
+    $('flat').setAttribute('aria-pressed', vw.tilt < 6);
+    fitBoard();
+  }
+  function setZoom(z) {
+    vw.zoom = Math.max(0.35, Math.min(3, z));
+    scene.style.setProperty('--zoom', vw.zoom.toFixed(3));
+  }
+
+  let drag = null;
+  scene.addEventListener('pointerdown', e => {
+    drag = { x: e.clientX, y: e.clientY, spin: vw.spin, tilt: vw.tilt, moved: false };
+    scene.classList.add('drag');
+    scene.setPointerCapture(e.pointerId);
+  });
+  scene.addEventListener('pointermove', e => {
+    if (!drag) return;
+    const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+    if (Math.abs(dx) + Math.abs(dy) > 4) drag.moved = true;
+    setView(drag.spin + dx * 0.35, drag.tilt - dy * 0.3);
+  });
+  scene.addEventListener('pointerup', e => {
+    const d = drag; drag = null;
+    scene.classList.remove('drag');
+    if (!d || d.moved) return;                       // a turn of the board is not a click
+    const hit = e.target.closest('[data-p]');
+    if (hit) toggleCoalition(hit.dataset.p);
+  });
+  scene.addEventListener('pointercancel', () => { drag = null; scene.classList.remove('drag'); });
+  scene.addEventListener('wheel', e => { e.preventDefault(); setZoom(vw.zoom * (e.deltaY < 0 ? 1.12 : 0.89)); }, { passive: false });
+
+  // Orbit: one rAF loop, only while it is switched on.
+  let orbit = 0;
+  function tick() {
+    setView(vw.spin + 0.22, vw.tilt);
+    orbit = requestAnimationFrame(tick);
+  }
+  $('spin').onclick = e => {
+    if (orbit) cancelAnimationFrame(orbit);
+    orbit = orbit ? 0 : requestAnimationFrame(tick);
+    scene.classList.toggle('nofx', !!orbit);   // each 0.22deg step is already small; easing it would smear
+    e.target.setAttribute('aria-pressed', !!orbit);
+  };
+  $('flat').onclick = () => setView(vw.tilt < 6 ? vw.spin : 0, vw.tilt < 6 ? 56 : 0);
+  $('recenter').onclick = () => { setView(0, 56); setZoom(1); };
+
   /* ---------- wiring ---------- */
+
+  function toggleCoalition(name) {
+    state.coalition[state.coalition.has(name) ? 'delete' : 'add'](name);
+    render();
+  }
 
   // Where to go when a change makes the recorded result stale: this country's
   // real rule, or the labelled FPTP model for countries that don't have one.
@@ -277,14 +470,25 @@
     render();
   }
 
-  $('country').innerHTML = Object.keys(COUNTRIES).sort()
-    .map(k => `<option>${esc(k)}</option>`).join('');
-  $('method').innerHTML = Object.entries(METHODS)
-    .map(([k, v]) => `<option value="${k}">${esc(v)}</option>`).join('');
+  $('country').innerHTML = Object.keys(COUNTRIES).sort().map(k => `<option>${esc(k)}</option>`).join('');
+  $('method').innerHTML = Object.entries(METHODS).map(([k, v]) => `<option value="${k}">${esc(v)}</option>`).join('');
 
   $('country').onchange = e => setCountry(e.target.value);
   $('method').onchange = e => { state.method = e.target.value; render(); };
-  $('threshold').oninput = e => { state.threshold = +e.target.value / 100; if (state.method === 'actual') state.method = $('method').value = native(); render(); };
+  let frame = 0, settle = 0;
+  function renderLive() {
+    stage.classList.add('live');
+    clearTimeout(settle);
+    settle = setTimeout(() => stage.classList.remove('live'), 220);
+    if (frame) return;                       // one render per frame, however fast the slider moves
+    frame = requestAnimationFrame(() => { frame = 0; render(); });
+  }
+
+  $('threshold').oninput = e => {
+    state.threshold = +e.target.value / 100;
+    if (state.method === 'actual') state.method = $('method').value = native();
+    renderLive();
+  };
   $('seats').onchange = e => {
     state.seats = Math.min(1200, Math.max(1, Math.round(+e.target.value) || 1));
     e.target.value = state.seats;
@@ -297,24 +501,22 @@
   /* One 'change' handler for both controls. Vote shares settle on blur rather
      than firing per keystroke, so a re-render never yanks the field out from
      under someone mid-type. Editing a share invalidates the stored election
-     result, so step off 'actual' to the cube rule — the labelled FPTP model. */
+     result, so step off 'actual' to the country's own rule. */
   $('parties').addEventListener('change', e => {
     const name = e.target.closest('.row').dataset.p;
     if (e.target.classList.contains('vs')) {
       state.shares[name] = Math.min(100, Math.max(0, +e.target.value || 0)) / 100;
       if (state.method === 'actual') state.method = $('method').value = native();
+      render();
     } else {
-      state.coalition[state.coalition.has(name) ? 'delete' : 'add'](name);
+      toggleCoalition(name);
     }
-    render();
   });
 
-  /* Board hover and click-to-coalition. Delegated once on the wrapper, since
-     the SVG element itself is replaced on every render. */
   const tip = $('tip');
   document.querySelector('main').addEventListener('mousemove', e => {
-    const name = e.target.dataset && e.target.dataset.p;
-    const p = name && view && view.parties.find(x => x.name === name);
+    const hit = e.target.closest && e.target.closest('[data-p]');
+    const p = hit && view && view.parties.find(x => x.name === hit.dataset.p);
     if (!p) { tip.style.opacity = 0; return; }
     tip.innerHTML = `<b>${esc(p.name)}</b><s>${p.seats} seats · ${pct(view.total ? p.seats / view.total : 0)} of the chamber</s><s>${pct(p.votes)} of the vote</s>`;
     tip.style.opacity = 1;
@@ -322,12 +524,6 @@
     tip.style.top = (e.clientY + 14) + 'px';
   });
   document.querySelector('main').addEventListener('mouseleave', () => { tip.style.opacity = 0; });
-  document.querySelector('main').addEventListener('click', e => {
-    const name = e.target.dataset && e.target.dataset.p;
-    if (!name) return;
-    state.coalition[state.coalition.has(name) ? 'delete' : 'add'](name);
-    render();
-  });
 
   $('png').onclick = () => {
     const svg = boardSvg(view), img = new Image();
@@ -347,6 +543,8 @@
     img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
   };
 
+  addEventListener('resize', () => view && paint(view));
+  setView(0, 56);
   setCountry('Germany');
 })();
 </script>
