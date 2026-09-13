@@ -1,0 +1,354 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Democracy Chess Board</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #14151a; --panel: #1c1e25; --line: #2a2d36; --sunk: #23252c;
+    --ink: #f2f3f5; --ink-2: #a8adb8; --ink-3: #70757f;
+    --gold: #f5c518;
+    --lt: #ece0c9; --dk: #d9c7a5;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+         font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  h1 { font-size: 17px; margin: 0; letter-spacing: -.01em; }
+  h1 span { color: var(--ink-3); font-weight: 400; }
+
+  header { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap;
+           padding: 14px 20px; border-bottom: 1px solid var(--line); }
+  header p { margin: 0; color: var(--ink-3); font-size: 12.5px; }
+
+  .app { display: grid; grid-template-columns: 380px minmax(0, 1fr); gap: 20px; padding: 20px; align-items: start; }
+  @media (max-width: 1000px) { .app { grid-template-columns: minmax(0, 1fr); } }
+
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px; }
+  .card + .card { margin-top: 14px; }
+  .card h2 #vsum { text-transform: none; letter-spacing: 0; color: var(--gold); font-weight: 500; }
+  .card h2 { font-size: 11px; text-transform: uppercase; letter-spacing: .08em;
+             color: var(--ink-3); margin: 0 0 10px; font-weight: 600; }
+
+  label.f { display: block; margin-bottom: 11px; }
+  label.f > span { display: block; font-size: 11.5px; color: var(--ink-2); margin-bottom: 4px; }
+  select, input[type=number] { width: 100%; background: var(--sunk); color: var(--ink);
+    border: 1px solid var(--line); border-radius: 6px; padding: 7px 8px; font: inherit; }
+  input[type=range] { width: 100%; accent-color: var(--gold); }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .btns { display: flex; gap: 8px; }
+  button { flex: 1; background: var(--sunk); color: var(--ink); border: 1px solid var(--line);
+           border-radius: 6px; padding: 7px 10px; font: inherit; cursor: pointer; }
+  button:hover { border-color: var(--ink-3); }
+
+  /* Party table: checkbox, piece, name + bars, votes input, seats */
+  .row { display: grid; grid-template-columns: 18px 18px minmax(0,1fr) 62px 44px;
+         gap: 8px; align-items: center; padding: 5px 4px; border-radius: 6px; }
+  .row:hover { background: #23252c; }
+  .row.cut .nm { color: var(--ink-3); text-decoration: line-through; }
+  .row input[type=checkbox] { accent-color: var(--gold); margin: 0; }
+  .pc { font-size: 14px; line-height: 18px; text-align: center; width: 18px; height: 18px;
+        border-radius: 3px; background: var(--lt); }
+  .nm { font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .bars { display: flex; flex-direction: column; gap: 2px; margin-top: 3px; }
+  .bars i { display: block; height: 4px; border-radius: 2px; min-width: 2px;
+             box-shadow: 0 0 0 1px rgba(255,255,255,.22); }
+  .bv { background: var(--ink-3); }
+  .row input.vs { padding: 3px 5px; font-size: 12px; text-align: right; }
+  .st { text-align: right; font-variant-numeric: tabular-nums; font-size: 12.5px; }
+  .hd { display: grid; grid-template-columns: 18px 18px minmax(0,1fr) 62px 44px; gap: 8px;
+        font-size: 10.5px; color: var(--ink-3); padding: 0 4px 6px; }
+  .hd b { font-weight: 500; }
+  .hd .r { text-align: right; }
+
+  .coal { margin-top: 10px; padding: 9px 11px; border-radius: 7px; font-size: 12.5px;
+          background: var(--sunk); border: 1px solid var(--line); color: var(--ink-2); }
+  .coal.win { border-color: #2f6f4a; color: #8fe0b0; }
+
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 14px; }
+  .tile { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 11px 13px; }
+  .tile .k { font-size: 10.5px; text-transform: uppercase; letter-spacing: .07em; color: var(--ink-3); }
+  .tile .v { font-size: 23px; font-weight: 600; letter-spacing: -.02em; margin: 3px 0 1px;
+             font-variant-numeric: tabular-nums; }
+  .tile .s { font-size: 11.5px; color: var(--ink-2); }
+
+  svg.board { display: block; width: auto; height: auto; max-width: 100%; max-height: 74vh;
+               margin-inline: auto; border-radius: 8px; background: var(--sunk); }
+  .note { color: var(--ink-2); font-size: 12.5px; margin: 12px 0 0; max-width: 70ch; }
+  .note b { color: var(--ink); font-weight: 600; }
+  .key { display: flex; gap: 14px; flex-wrap: wrap; color: var(--ink-3); font-size: 11.5px; margin-top: 10px; }
+  .key span { display: flex; align-items: center; gap: 5px; }
+  .key i { width: 11px; height: 11px; border-radius: 3px; display: inline-block; }
+
+  #tip { position: fixed; pointer-events: none; opacity: 0; transition: opacity .1s;
+         background: #0c0d11; border: 1px solid var(--line); border-radius: 7px;
+         padding: 6px 9px; font-size: 12px; white-space: nowrap; z-index: 9;
+         box-shadow: 0 6px 20px rgba(0,0,0,.5); }
+  #tip b { display: block; font-size: 12.5px; }
+  #tip s { display: block; color: var(--ink-2); text-decoration: none; font-variant-numeric: tabular-nums; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Democracy Chess Board <span>— one cell, one seat</span></h1>
+  <p>Piece rank follows party rank. The gold king is the seat that makes a majority.</p>
+</header>
+
+<div class="app">
+  <aside>
+    <div class="card">
+      <h2>Scenario</h2>
+      <label class="f"><span>Country</span><select id="country"></select></label>
+      <label class="f"><span>Allocation method</span><select id="method"></select></label>
+      <div class="two">
+        <label class="f"><span>Threshold <b id="thv"></b></span>
+          <input type="range" id="threshold" min="0" max="10" step="0.25"></label>
+        <label class="f"><span>Chamber size</span>
+          <input type="number" id="seats" min="1" max="1200" step="1"></label>
+      </div>
+      <div class="btns">
+        <button id="reset" type="button">Reset</button>
+        <button id="labels" type="button" aria-pressed="false">Label all</button>
+        <button id="png" type="button">PNG</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Parties — click to build a coalition <span id="vsum"></span></h2>
+      <div class="hd"><b>Gov</b><b></b><b>Party</b><b class="r">Votes %</b><b class="r">Seats</b></div>
+      <div id="parties"></div>
+      <div class="coal" id="coal"></div>
+    </div>
+  </aside>
+
+  <main>
+    <div class="tiles" id="tiles"></div>
+    <svg class="board" id="board" role="img"></svg>
+    <div class="key">
+      <span><i style="background:var(--gold)"></i> pivot seat — crosses the majority line</span>
+      <span>♛ ♜ ♝ ♞ ♟ — 1st to 5th-and-below by seats</span>
+      <span><i style="background:var(--sunk);border:1px solid var(--line)"></i> empty — chamber is not a perfect rectangle</span>
+    </div>
+    <p class="note" id="note"></p>
+  </main>
+</div>
+
+<div id="tip" role="status" aria-live="polite"></div>
+
+<script src="countries.js"></script>
+<script src="electoral.js"></script>
+<script>
+(function () {
+  const CELL = 24, PAD = 6;
+  const $ = id => document.getElementById(id);
+  const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const pct = n => (n * 100).toFixed(1) + '%';
+
+  const state = { country: 'Germany', method: '', threshold: 0, seats: 0, shares: {}, coalition: new Set(), labelsAll: false };
+  let view = null;   // last board state, for hover and export
+
+  /* ---------- board ---------- */
+
+  function boardSvg(b) {
+    const w = b.cols * CELL + PAD * 2, h = b.rows * CELL + PAD * 2;
+    const dim = state.coalition.size > 0;
+    let squares = '', pieces = '', labels = '';
+
+    for (let i = 0; i < b.rows * b.cols; i++) {
+      const r = (i / b.cols) | 0, c = i % b.cols, x = PAD + c * CELL, y = PAD + r * CELL;
+      if (i >= b.total) {
+        squares += `<rect class="off" x="${x}" y="${y}" width="${CELL}" height="${CELL}"/>`;
+        continue;
+      }
+      const cell = b.cells[i], p = esc(cell.party);
+      squares += `<rect class="${(r + c) % 2 ? 'dk' : 'lt'}${cell.pivot ? ' pv' : ''}" x="${x}" y="${y}" width="${CELL}" height="${CELL}" data-p="${p}"/>`;
+      pieces += `<text x="${x + CELL / 2}" y="${y + CELL / 2 + 1}" fill="${cell.color}" data-p="${p}"` +
+                (dim && !state.coalition.has(cell.party) ? ' opacity=".25"' : '') + `>${cell.piece}</text>`;
+    }
+
+    // One direct label per bloc, at the middle of its run. Small parties only when asked.
+    for (const p of b.parties) {
+      if (!p.seats || (!state.labelsAll && p.seats / b.total < 0.05)) continue;
+      const mid = p.start + ((p.seats / 2) | 0);
+      // Keep the label inside the board. Half-width is estimated from the
+      // character count — SVG strings can't measure text before they exist.
+      const half = p.name.length * 3.3 + 3;
+      const x = Math.min(Math.max(PAD + half, PAD + (mid % b.cols) * CELL + CELL / 2), w - PAD - half);
+      labels += `<text class="lab" x="${x.toFixed(1)}" y="${PAD + (((mid / b.cols) | 0) * CELL) + CELL / 2 + 1}">${esc(p.name)}</text>`;
+    }
+
+    // The <style> lives inside the SVG so the PNG export keeps it.
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}">` +
+      `<style>` +
+      `rect.lt{fill:#ece0c9}rect.dk{fill:#d9c7a5}rect.off{fill:#23252c}rect.pv{fill:#f5c518}` +
+      `text{font:16px "Apple Symbols","Segoe UI Symbol",serif;text-anchor:middle;dominant-baseline:central;` +
+      `paint-order:stroke;stroke:rgba(0,0,0,.42);stroke-width:.7px}` +
+      `text.lab{font:600 11px system-ui,sans-serif;fill:#fff;stroke:rgba(0,0,0,.8);stroke-width:3.2px}` +
+      `</style><rect width="${w}" height="${h}" fill="#23252c"/>${squares}${pieces}${labels}</svg>`;
+  }
+
+  /* ---------- panels ---------- */
+
+  function tiles(b) {
+    const m = b.metrics;
+    const top = b.parties[0] || { name: '—', seats: 0 };
+    const gq = m.gallagher < 2 ? 'very close to the vote' : m.gallagher < 5 ? 'broadly proportional'
+             : m.gallagher < 10 ? 'noticeably distorted' : 'severely distorted';
+    const held = top.seats >= b.majority ? `${top.name} holds it alone` : 'no single party holds it';
+    return [
+      ['Chamber', b.total, `${b.rows} × ${b.cols} board`],
+      ['Majority', b.majority, held],
+      ['Largest party', top.seats, `${top.name} · ${pct(top.votes || 0)} of votes`],
+      ['Disproportionality', m.gallagher.toFixed(1), `Gallagher index — ${gq}`],
+      ['Effective parties', m.enp.toFixed(2), 'Laakso–Taagepera'],
+      ['Unrepresented votes', pct(m.wasted), 'cast for parties that won no seats at all'],
+    ].map(([k, v, s]) => `<div class="tile"><div class="k">${k}</div><div class="v">${v}</div><div class="s">${esc(s)}</div></div>`).join('');
+  }
+
+  function partyRows(b) {
+    const max = Math.max(...b.parties.map(p => Math.max(p.votes, p.seats / (b.total || 1))), 0.01);
+    return b.parties.map(p => {
+      const seatShare = b.total ? p.seats / b.total : 0;
+      const shown = state.shares[p.name] != null ? state.shares[p.name] : p.votes;
+      return `<label class="row${p.cut ? ' cut' : ''}" data-p="${esc(p.name)}">` +
+        `<input type="checkbox" ${state.coalition.has(p.name) ? 'checked' : ''} aria-label="Add ${esc(p.name)} to coalition">` +
+        `<span class="pc" style="color:${p.color}">${p.piece}</span>` +
+        `<span><span class="nm">${esc(p.name)}</span><span class="bars">` +
+          `<i class="bv" style="width:${(p.votes / max * 100).toFixed(1)}%"></i>` +
+          `<i style="width:${(seatShare / max * 100).toFixed(1)}%;background:${p.color}"></i>` +
+        `</span></span>` +
+        `<input class="vs" type="number" min="0" max="100" step="0.1" value="${(shown * 100).toFixed(1)}" aria-label="${esc(p.name)} vote share">` +
+        `<span class="st">${p.seats}</span></label>`;
+    }).join('');
+  }
+
+  function coalition(b) {
+    const picked = b.parties.filter(p => state.coalition.has(p.name));
+    if (!picked.length) return 'Click parties to add them to a government. The board dims everyone left out.';
+    const n = picked.reduce((a, p) => a + p.seats, 0), gap = b.majority - n;
+    return `<b>${picked.map(p => esc(p.name)).join(' + ')}</b> — ${n} of ${b.total} seats · ` +
+      (gap <= 0 ? `majority, ${1 - gap} to spare` : `${gap} short of ${b.majority}`);
+  }
+
+  /* ---------- render ---------- */
+
+  function render() {
+    const rules = COUNTRIES[state.country];
+    const b = view = runScenario(rules, {
+      method: state.method, seats: state.seats, threshold: state.threshold, shares: state.shares,
+    });
+
+    $('board').outerHTML = boardSvg(b).replace('<svg ', '<svg class="board" id="board" role="img" aria-label="' +
+      esc(`${b.chamber}, ${b.total} seats. ` + b.parties.filter(p => p.seats).map(p => `${p.name} ${p.seats}`).join(', ')) + '" ');
+    $('tiles').innerHTML = tiles(b);
+    $('parties').innerHTML = partyRows(b);
+    const raw = Object.values(state.shares).reduce((a, v) => a + v, 0);
+    $('vsum').textContent = Math.abs(raw - 1) < 0.005 ? '' : `· entered ${pct(raw)}, normalised`;
+    const coal = $('coal');
+    coal.innerHTML = coalition(b);
+    coal.classList.toggle('win', b.parties.filter(p => state.coalition.has(p.name)).reduce((a, p) => a + p.seats, 0) >= b.majority && state.coalition.size > 0);
+    $('note').innerHTML = `<b>${esc(b.country)} · ${esc(b.chamber)} ${b.year}</b> — ${esc(b.system)}. ${esc(b.note || '')}` +
+      (b.method === 'actual' ? '' : ` <b>Now showing:</b> ${esc(METHODS[b.method])} at a ${pct(b.threshold)} threshold, not the elected chamber.`);
+    $('thv').textContent = state.threshold ? pct(state.threshold) : 'none';
+  }
+
+  /* ---------- wiring ---------- */
+
+  // Where to go when a change makes the recorded result stale: this country's
+  // real rule, or the labelled FPTP model for countries that don't have one.
+  const native = () => {
+    const m = COUNTRIES[state.country].method;
+    return m === 'actual' ? 'cube' : m;
+  };
+
+  function setCountry(name) {
+    const r = COUNTRIES[name];
+    // Seed every party's share up front: runScenario normalises internally, so
+    // without this, typing 50 into one row silently restates all the others.
+    const shares = {};
+    r.parties.forEach(p => { shares[p.name] = p.vote_share; });
+    Object.assign(state, { country: name, method: 'actual', threshold: r.threshold, seats: r.total_seats, shares, coalition: new Set() });
+    $('country').value = name;
+    $('method').value = 'actual';
+    $('threshold').value = r.threshold * 100;
+    $('seats').value = r.total_seats;
+    render();
+  }
+
+  $('country').innerHTML = Object.keys(COUNTRIES).sort()
+    .map(k => `<option>${esc(k)}</option>`).join('');
+  $('method').innerHTML = Object.entries(METHODS)
+    .map(([k, v]) => `<option value="${k}">${esc(v)}</option>`).join('');
+
+  $('country').onchange = e => setCountry(e.target.value);
+  $('method').onchange = e => { state.method = e.target.value; render(); };
+  $('threshold').oninput = e => { state.threshold = +e.target.value / 100; if (state.method === 'actual') state.method = $('method').value = native(); render(); };
+  $('seats').onchange = e => {
+    state.seats = Math.min(1200, Math.max(1, Math.round(+e.target.value) || 1));
+    e.target.value = state.seats;
+    if (state.method === 'actual') state.method = $('method').value = native();
+    render();
+  };
+  $('reset').onclick = () => setCountry(state.country);
+  $('labels').onclick = e => { state.labelsAll = !state.labelsAll; e.target.setAttribute('aria-pressed', state.labelsAll); render(); };
+
+  /* One 'change' handler for both controls. Vote shares settle on blur rather
+     than firing per keystroke, so a re-render never yanks the field out from
+     under someone mid-type. Editing a share invalidates the stored election
+     result, so step off 'actual' to the cube rule — the labelled FPTP model. */
+  $('parties').addEventListener('change', e => {
+    const name = e.target.closest('.row').dataset.p;
+    if (e.target.classList.contains('vs')) {
+      state.shares[name] = Math.min(100, Math.max(0, +e.target.value || 0)) / 100;
+      if (state.method === 'actual') state.method = $('method').value = native();
+    } else {
+      state.coalition[state.coalition.has(name) ? 'delete' : 'add'](name);
+    }
+    render();
+  });
+
+  /* Board hover and click-to-coalition. Delegated once on the wrapper, since
+     the SVG element itself is replaced on every render. */
+  const tip = $('tip');
+  document.querySelector('main').addEventListener('mousemove', e => {
+    const name = e.target.dataset && e.target.dataset.p;
+    const p = name && view && view.parties.find(x => x.name === name);
+    if (!p) { tip.style.opacity = 0; return; }
+    tip.innerHTML = `<b>${esc(p.name)}</b><s>${p.seats} seats · ${pct(view.total ? p.seats / view.total : 0)} of the chamber</s><s>${pct(p.votes)} of the vote</s>`;
+    tip.style.opacity = 1;
+    tip.style.left = Math.min(e.clientX + 14, innerWidth - 190) + 'px';
+    tip.style.top = (e.clientY + 14) + 'px';
+  });
+  document.querySelector('main').addEventListener('mouseleave', () => { tip.style.opacity = 0; });
+  document.querySelector('main').addEventListener('click', e => {
+    const name = e.target.dataset && e.target.dataset.p;
+    if (!name) return;
+    state.coalition[state.coalition.has(name) ? 'delete' : 'add'](name);
+    render();
+  });
+
+  $('png').onclick = () => {
+    const svg = boardSvg(view), img = new Image();
+    img.onload = () => {
+      const cv = document.createElement('canvas');
+      cv.width = img.width * 2; cv.height = img.height * 2;
+      const g = cv.getContext('2d');
+      g.scale(2, 2); g.drawImage(img, 0, 0);
+      cv.toBlob(blob => {
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `${state.country.replace(/\s+/g, '-').toLowerCase()}-${view.method}.png`;
+        a.click();
+        URL.revokeObjectURL(a.href);
+      });
+    };
+    img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+  };
+
+  setCountry('Germany');
+})();
+</script>
+</body>
+</html>
